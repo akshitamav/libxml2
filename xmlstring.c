@@ -178,6 +178,9 @@ xmlStrEqual(const xmlChar *str1, const xmlChar *str2) {
     printf("xmlStrEqual\n");
     printf("str1: %s\n", str1);
     printf("str2: %s\n", str2);
+    printf("l1: %d\n", strlen(str1));
+    printf("l2: %d\n", strlen(str2));
+
     return(strcmp((const char *)str1, (const char *)str2) == 0);
 #else
     do {
