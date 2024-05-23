@@ -145,6 +145,9 @@ xmlStrcmp(const xmlChar *str1, const xmlChar *str2) {
     if (str1 == NULL) return(-1);
     if (str2 == NULL) return(1);
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    printf("xmlStrcmp\n");
+    printf("str1: %s\n", str1);
+    printf("str2: %s\n", str2);
     return(strcmp((const char *)str1, (const char *)str2));
 #else
     do {
@@ -172,8 +175,9 @@ xmlStrEqual(const xmlChar *str1, const xmlChar *str2) {
     if (str1 == NULL) return(0);
     if (str2 == NULL) return(0);
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    printf("str1: %s", str1);
-    printf("str2: %s", str2);
+    printf("xmlStrEqual\n");
+    printf("str1: %s\n", str1);
+    printf("str2: %s\n", str2);
     return(strcmp((const char *)str1, (const char *)str2) == 0);
 #else
     do {
