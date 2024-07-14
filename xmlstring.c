@@ -177,6 +177,7 @@ xmlStrEqual(const xmlChar *str1, const xmlChar *str2) {
 #ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     printf("xmlStrEqual\n");
     printf("p1: %p\n", str1);
+    printf("p2: %p\n", str2);
     printf("str1: '%s'\n", str1);
     printf("str2: '%s'\n", str2);
     printf("l1: %d\n", strlen(str1));

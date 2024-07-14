@@ -10036,6 +10036,7 @@ xmlParseVersionNum(xmlParserCtxtPtr ctxt) {
     NEXT;
     cur=CUR;
     while ((cur >= '0') && (cur <= '9')) {
+        printf("initializing %p @ %d\n", (void*)buf, len);
 	if (len + 1 >= size) {
 	    xmlChar *tmp;
 
@@ -10053,6 +10054,7 @@ xmlParseVersionNum(xmlParserCtxtPtr ctxt) {
 	cur=CUR;
     }
     buf[len] = 0;
+    printf("len as measured: %ld\n", strlen((const char*)buf));
     return(buf);
 }
 
