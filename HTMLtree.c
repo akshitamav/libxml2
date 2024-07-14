@@ -366,10 +366,10 @@ htmlSaveErr(int code, xmlNodePtr node, const char *extra)
 	    msg = "unexpected error number\n";
     }
 
-    res = __xmlRaiseError(NULL, NULL, NULL, NULL, node,
-                          XML_FROM_OUTPUT, code, XML_ERR_ERROR, NULL, 0,
-                          extra, NULL, NULL, 0, 0,
-                          msg, extra);
+    res = xmlRaiseError(NULL, NULL, NULL, NULL, node,
+                        XML_FROM_OUTPUT, code, XML_ERR_ERROR, NULL, 0,
+                        extra, NULL, NULL, 0, 0,
+                        msg, extra);
     if (res < 0)
         xmlRaiseMemoryError(NULL, NULL, NULL, XML_FROM_OUTPUT, NULL);
 }
@@ -385,22 +385,17 @@ htmlFindOutputEncoder(const char *encoding) {
     xmlCharEncodingHandler *handler = NULL;
 
     if (encoding != NULL) {
-	xmlCharEncoding enc;
+        int res;
 
-	enc = xmlParseCharEncoding(encoding);
-	if (enc != XML_CHAR_ENCODING_UTF8) {
-	    xmlOpenCharEncodingHandler(encoding, /* output */ 1, &handler);
-	    if (handler == NULL)
-		htmlSaveErr(XML_SAVE_UNKNOWN_ENCODING, NULL, encoding);
-	}
+        res = xmlOpenCharEncodingHandler(encoding, /* output */ 1,
+                                         &handler);
+        if (res != XML_ERR_OK)
+            htmlSaveErr(XML_SAVE_UNKNOWN_ENCODING, NULL, encoding);
     } else {
         /*
-         * Fallback to HTML or ASCII when the encoding is unspecified
+         * Fallback to HTML when the encoding is unspecified
          */
-        if (handler == NULL)
-            xmlOpenCharEncodingHandler("HTML", /* output */ 1, &handler);
-        if (handler == NULL)
-            xmlOpenCharEncodingHandler("ascii", /* output */ 1, &handler);
+        xmlOpenCharEncodingHandler("HTML", /* output */ 1, &handler);
     }
 
     return(handler);

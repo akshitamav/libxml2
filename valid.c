@@ -119,7 +119,7 @@ xmlErrValid(xmlValidCtxtPtr ctxt, xmlParserErrors error,
                   NULL, NULL, 0, msg, extra);
 }
 
-#if defined(LIBXML_VALID_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
+#ifdef LIBXML_VALID_ENABLED
 /**
  * xmlErrValidNode:
  * @ctxt:  an XML validation parser context
@@ -140,9 +140,7 @@ xmlErrValidNode(xmlValidCtxtPtr ctxt,
     xmlDoErrValid(ctxt, node, error, XML_ERR_ERROR, str1, str2, str3, 0,
                   msg, str1, str2, str3);
 }
-#endif /* LIBXML_VALID_ENABLED or LIBXML_SCHEMAS_ENABLED */
 
-#ifdef LIBXML_VALID_ENABLED
 /**
  * xmlErrValidNodeNr:
  * @ctxt:  an XML validation parser context
@@ -512,11 +510,13 @@ xmlValidBuildAContentModel(xmlElementContentPtr content,
 		oldstate = ctxt->state;
 	    }
 	    do {
-		xmlValidBuildAContentModel(content->c1, ctxt, name);
+		if (xmlValidBuildAContentModel(content->c1, ctxt, name) == 0)
+                    return(0);
 		content = content->c2;
 	    } while ((content->type == XML_ELEMENT_CONTENT_SEQ) &&
 		     (content->ocur == XML_ELEMENT_CONTENT_ONCE));
-	    xmlValidBuildAContentModel(content, ctxt, name);
+	    if (xmlValidBuildAContentModel(content, ctxt, name) == 0)
+                return(0);
 	    oldend = ctxt->state;
 	    ctxt->state = xmlAutomataNewEpsilon(ctxt->am, oldend, NULL);
 	    switch (ocur) {
@@ -554,13 +554,15 @@ xmlValidBuildAContentModel(xmlElementContentPtr content,
 	     */
 	    do {
 		ctxt->state = oldstate;
-		xmlValidBuildAContentModel(content->c1, ctxt, name);
+		if (xmlValidBuildAContentModel(content->c1, ctxt, name) == 0)
+                    return(0);
 		xmlAutomataNewEpsilon(ctxt->am, ctxt->state, oldend);
 		content = content->c2;
 	    } while ((content->type == XML_ELEMENT_CONTENT_OR) &&
 		     (content->ocur == XML_ELEMENT_CONTENT_ONCE));
 	    ctxt->state = oldstate;
-	    xmlValidBuildAContentModel(content, ctxt, name);
+	    if (xmlValidBuildAContentModel(content, ctxt, name) == 0)
+                return(0);
 	    xmlAutomataNewEpsilon(ctxt->am, ctxt->state, oldend);
 	    ctxt->state = xmlAutomataNewEpsilon(ctxt->am, oldend, NULL);
 	    switch (ocur) {
@@ -624,7 +626,8 @@ xmlValidBuildContentModel(xmlValidCtxtPtr ctxt, xmlElementPtr elem) {
 	return(0);
     }
     ctxt->state = xmlAutomataGetInitState(ctxt->am);
-    xmlValidBuildAContentModel(elem->content, ctxt, elem->name);
+    if (xmlValidBuildAContentModel(elem->content, ctxt, elem->name) == 0)
+        goto done;
     xmlAutomataSetFinalState(ctxt->am, ctxt->state);
     elem->contModel = xmlAutomataCompile(ctxt->am);
     if (elem->contModel == NULL) {
@@ -670,7 +673,8 @@ done:
 xmlValidCtxtPtr xmlNewValidCtxt(void) {
     xmlValidCtxtPtr ret;
 
-    if ((ret = xmlMalloc(sizeof (xmlValidCtxt))) == NULL)
+    ret = xmlMalloc(sizeof (xmlValidCtxt));
+    if (ret == NULL)
 	return (NULL);
 
     (void) memset(ret, 0, sizeof (xmlValidCtxt));
@@ -1348,7 +1352,6 @@ xmlFreeElementTable(xmlElementTablePtr table) {
     xmlHashFree(table, xmlFreeElementTableEntry);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlCopyElement:
  * @elem:  An element
@@ -1404,7 +1407,6 @@ xmlElementTablePtr
 xmlCopyElementTable(xmlElementTablePtr table) {
     return(xmlHashCopySafe(table, xmlCopyElement, xmlFreeElementTableEntry));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 #ifdef LIBXML_OUTPUT_ENABLED
 /**
@@ -1514,7 +1516,6 @@ xmlFreeEnumeration(xmlEnumerationPtr cur) {
     }
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlCopyEnumeration:
  * @cur:  the tree to copy.
@@ -1549,7 +1550,6 @@ xmlCopyEnumeration(xmlEnumerationPtr cur) {
 
     return(ret);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 #ifdef LIBXML_VALID_ENABLED
 /**
@@ -1887,7 +1887,6 @@ xmlFreeAttributeTable(xmlAttributeTablePtr table) {
     xmlHashFree(table, xmlFreeAttributeTableEntry);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlCopyAttribute:
  * @attr:  An attribute
@@ -1953,7 +1952,6 @@ xmlCopyAttributeTable(xmlAttributeTablePtr table) {
     return(xmlHashCopySafe(table, xmlCopyAttribute,
                            xmlFreeAttributeTableEntry));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 #ifdef LIBXML_OUTPUT_ENABLED
 /**
@@ -2145,7 +2143,6 @@ xmlFreeNotationTable(xmlNotationTablePtr table) {
     xmlHashFree(table, xmlFreeNotationTableEntry);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlCopyNotation:
  * @nota:  A notation
@@ -2197,7 +2194,6 @@ xmlNotationTablePtr
 xmlCopyNotationTable(xmlNotationTablePtr table) {
     return(xmlHashCopySafe(table, xmlCopyNotation, xmlFreeNotationTableEntry));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 #ifdef LIBXML_OUTPUT_ENABLED
 /**
@@ -2331,9 +2327,6 @@ xmlAddIDInternal(xmlAttrPtr attr, const xmlChar *value, xmlIDPtr *idPtr) {
     if (doc == NULL)
         return(0);
 
-    if (attr->id != NULL)
-        xmlRemoveID(doc, attr);
-
     /*
      * Create the ID table if needed.
      */
@@ -2344,14 +2337,8 @@ xmlAddIDInternal(xmlAttrPtr attr, const xmlChar *value, xmlIDPtr *idPtr) {
             return(-1);
     } else {
         id = xmlHashLookup(table, value);
-        if (id != NULL) {
-            if (id->attr != NULL) {
-                id->attr->id = NULL;
-                id->attr->atype = 0;
-            }
-            ret = 0;
-            goto done;
-        }
+        if (id != NULL)
+            return(0);
     }
 
     id = (xmlIDPtr) xmlMalloc(sizeof(xmlID));
@@ -2369,6 +2356,9 @@ xmlAddIDInternal(xmlAttrPtr attr, const xmlChar *value, xmlIDPtr *idPtr) {
         return(-1);
     }
 
+    if (attr->id != NULL)
+        xmlRemoveID(doc, attr);
+
     if (xmlHashAddEntry(table, value, id) < 0) {
 	xmlFreeID(id);
 	return(-1);
@@ -2378,7 +2368,6 @@ xmlAddIDInternal(xmlAttrPtr attr, const xmlChar *value, xmlIDPtr *idPtr) {
     if (idPtr != NULL)
         *idPtr = id;
 
-done:
     id->attr = attr;
     id->lineno = xmlGetLineNo(attr->parent);
     attr->atype = XML_ATTRIBUTE_ID;
@@ -2757,10 +2746,12 @@ xmlAddRef(xmlValidCtxtPtr ctxt, xmlDocPtr doc, const xmlChar *value,
      * Return the ref
      */
 
-    if (NULL == (ref_list = xmlHashLookup(table, value))) {
+    ref_list = xmlHashLookup(table, value);
+    if (ref_list == NULL) {
         int res;
 
-        if (NULL == (ref_list = xmlListCreate(xmlFreeRef, xmlDummyCompare)))
+        ref_list = xmlListCreate(xmlFreeRef, xmlDummyCompare);
+        if (ref_list == NULL)
 	    goto failed;
         res = xmlHashAdd(table, value, ref_list);
         if (res <= 0) {
@@ -3152,7 +3143,7 @@ xmlGetDtdNotationDesc(xmlDtdPtr dtd, const xmlChar *name) {
     return(xmlHashLookup(table, name));
 }
 
-#if defined(LIBXML_VALID_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
+#ifdef LIBXML_VALID_ENABLED
 /**
  * xmlValidateNotationUse:
  * @ctxt:  the validation context
@@ -3178,7 +3169,7 @@ xmlValidateNotationUse(xmlValidCtxtPtr ctxt, xmlDocPtr doc,
     if ((notaDecl == NULL) && (doc->extSubset != NULL))
 	notaDecl = xmlGetDtdNotationDesc(doc->extSubset, notationName);
 
-    if ((notaDecl == NULL) && (ctxt != NULL)) {
+    if (notaDecl == NULL) {
 	xmlErrValidNode(ctxt, (xmlNodePtr) doc, XML_DTD_UNKNOWN_NOTATION,
 	                "NOTATION %s is not declared\n",
 		        notationName, NULL, NULL);
@@ -3186,7 +3177,7 @@ xmlValidateNotationUse(xmlValidCtxtPtr ctxt, xmlDocPtr doc,
     }
     return(1);
 }
-#endif /* LIBXML_VALID_ENABLED or LIBXML_SCHEMAS_ENABLED */
+#endif /* LIBXML_VALID_ENABLED */
 
 /**
  * xmlIsMixedElement:
@@ -6803,7 +6794,6 @@ xmlValidGetPotentialChildren(xmlElementContent *ctree,
  */
 static void xmlNoValidityErr(void *ctx ATTRIBUTE_UNUSED,
                                 const char *msg ATTRIBUTE_UNUSED, ...) {
-    return;
 }
 
 /**

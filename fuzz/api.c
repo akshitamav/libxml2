@@ -964,7 +964,6 @@ LLVMFuzzerInitialize(int *argc ATTRIBUTE_UNUSED,
     xmlCatalogSetDefaults(XML_CATA_ALLOW_NONE);
 #endif
     xmlSetGenericErrorFunc(NULL, xmlFuzzErrorFunc);
-    xmlSetExternalEntityLoader(xmlFuzzEntityLoader);
 
     return 0;
 }
@@ -2497,7 +2496,7 @@ LLVMFuzzerTestOneInput(const char *data, size_t size) {
                 list = xmlStringGetNodeList(
                     getDoc(0),
                     value = getStr(0));
-                oomReport = (value != NULL && list == NULL);
+                oomReport = (value != NULL && value[0] != 0 && list == NULL);
                 xmlFreeNodeList(list);
                 endOp();
                 break;
@@ -2515,7 +2514,7 @@ LLVMFuzzerTestOneInput(const char *data, size_t size) {
                     doc,
                     value,
                     xmlStrlen(value));
-                oomReport = (value != NULL && list == NULL);
+                oomReport = (value != NULL && value[0] != 0 && list == NULL);
                 xmlFreeNodeList(list);
                 endOp();
                 break;

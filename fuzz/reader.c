@@ -15,9 +15,7 @@
 #include <string.h>
 
 #if 0
-  #define DEBUG printf
-#else
-  #define DEBUG noop
+  #define DEBUG
 #endif
 
 typedef enum {
@@ -82,14 +80,11 @@ typedef enum {
 } opType;
 
 static void
-noop(const char *fmt, ...) {
-    (void) fmt;
-}
-
-static void
 startOp(const char *name) {
     (void) name;
-    DEBUG("%s\n", name);
+#ifdef DEBUG
+    fprintf(stderr, "%s\n", name);
+#endif
 }
 
 int
@@ -101,8 +96,6 @@ LLVMFuzzerInitialize(int *argc ATTRIBUTE_UNUSED,
     xmlInitializeCatalog();
     xmlCatalogSetDefaults(XML_CATA_ALLOW_NONE);
 #endif
-    xmlSetGenericErrorFunc(NULL, xmlFuzzErrorFunc);
-    xmlSetExternalEntityLoader(xmlFuzzEntityLoader);
 
     return 0;
 }
@@ -132,10 +125,26 @@ LLVMFuzzerTestOneInput(const char *data, size_t size) {
     if (docBuffer == NULL)
         goto exit;
 
+#ifdef DEBUG
+    fprintf(stderr, "Input document (%d bytes):\n", (int) docSize);
+    for (i = 0; (size_t) i < docSize; i++) {
+        int c = (unsigned char) docBuffer[i];
+
+        if ((c == '\n' || (c >= 0x20 && c <= 0x7E)))
+            putc(c, stderr);
+        else
+            fprintf(stderr, "\\x%02X", c);
+    }
+    fprintf(stderr, "\nEOF\n");
+#endif
+
     xmlFuzzMemSetLimit(maxAlloc);
     reader = xmlReaderForMemory(docBuffer, docSize, NULL, NULL, opts);
     if (reader == NULL)
         goto exit;
+
+    xmlTextReaderSetStructuredErrorHandler(reader, xmlFuzzSErrorFunc, NULL);
+    xmlTextReaderSetResourceLoader(reader, xmlFuzzResourceLoader, NULL);
 
     i = 0;
     while (i < programSize) {
@@ -519,6 +528,7 @@ LLVMFuzzerTestOneInput(const char *data, size_t size) {
             case OP_BYTE_CONSUMED:
                 startOp("ByteConsumed");
                 xmlTextReaderByteConsumed(reader);
+                oomReport = -1;
                 break;
         }
 

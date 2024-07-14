@@ -13,6 +13,11 @@
 #include <stdarg.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
+  #include <fcntl.h>
+  #include <io.h>
+#endif
+
 #ifdef HAVE_LIBREADLINE
 #include <readline/readline.h>
 #ifdef HAVE_LIBHISTORY
@@ -64,9 +69,11 @@ xmlShellReadline(const char *prompt) {
     /* Get a line from the user. */
     line_read = readline (prompt);
 
+#ifdef HAVE_LIBHISTORY
     /* If the line has any text in it, save it on the history. */
     if (line_read && *line_read)
 	add_history (line_read);
+#endif
 
     return (line_read);
 #else
@@ -313,6 +320,11 @@ int main(int argc, char **argv) {
     int ret;
     int exit_value = 0;
 
+#ifdef _WIN32
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+#endif
 
     if (argc <= 1) {
 	usage(argv[0]);
@@ -475,7 +487,7 @@ int main(int argc, char **argv) {
 		    if (xmlCatalogIsEmpty(catal)) {
 			remove(argv[i + 1]);
 		    } else {
-			out = fopen(argv[i + 1], "w");
+			out = fopen(argv[i + 1], "wb");
 			if (out == NULL) {
 			    fprintf(stderr, "could not open %s for saving\n",
 				    argv[i + 1]);
@@ -490,7 +502,7 @@ int main(int argc, char **argv) {
 			if (xmlCatalogIsEmpty(super)) {
 			    remove(XML_SGML_DEFAULT_CATALOG);
 			} else {
-			    out = fopen(XML_SGML_DEFAULT_CATALOG, "w");
+			    out = fopen(XML_SGML_DEFAULT_CATALOG, "wb");
 			    if (out == NULL) {
 				fprintf(stderr,
 					"could not open %s for saving\n",
@@ -580,7 +592,7 @@ int main(int argc, char **argv) {
 	if (noout && filename && *filename) {
 	    FILE *out;
 
-	    out = fopen(filename, "w");
+	    out = fopen(filename, "wb");
 	    if (out == NULL) {
 		fprintf(stderr, "could not open %s for saving\n", filename);
 		exit_value = 2;

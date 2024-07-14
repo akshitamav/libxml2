@@ -628,6 +628,9 @@ struct _xmlSchemaParserCtxt {
     xmlSchemaRedefPtr redef; /* Used for redefinitions. */
     int redefCounter; /* Used for redefinitions. */
     xmlSchemaItemListPtr attrProhibs;
+
+    xmlResourceLoader resourceLoader;
+    void *resourceCtxt;
 };
 
 /**
@@ -10506,6 +10509,9 @@ doc_load:
 
         if (pctxt->serror != NULL)
             xmlCtxtSetErrorHandler(parserCtxt, pctxt->serror, pctxt->errCtxt);
+        if (pctxt->resourceLoader != NULL)
+            xmlCtxtSetResourceLoader(parserCtxt, pctxt->resourceLoader,
+                                     pctxt->resourceCtxt);
 
 	if ((pctxt->dict != NULL) && (parserCtxt->dict != NULL)) {
 	    /*
@@ -21414,6 +21420,26 @@ xmlSchemaGetParserErrors(xmlSchemaParserCtxtPtr ctxt,
 }
 
 /**
+ * xmlSchemaSetResourceLoader:
+ * @ctxt:  schema parser
+ * @loader:  resource loader
+ * @data:  user data which will be passed to the loader
+ *
+ * Register a callback function that will be called to load documents
+ * or external entities.
+ *
+ * Available since 2.14.0.
+ */
+void
+xmlSchemaSetResourceLoader(xmlSchemaParserCtxtPtr ctxt,
+                           xmlResourceLoader loader, void *data) {
+    if (ctxt == NULL)
+        return;
+    ctxt->resourceLoader = loader;
+    ctxt->resourceCtxt = data;
+}
+
+/**
  * xmlSchemaFacetTypeToString:
  * @type:  the facet type
  *
@@ -27317,7 +27343,6 @@ exit:
 internal_error:
     vctxt->err = -1;
     xmlStopParser(vctxt->parserCtxt);
-    return;
 }
 
 static void
@@ -27361,7 +27386,6 @@ exit:
 internal_error:
     vctxt->err = -1;
     xmlStopParser(vctxt->parserCtxt);
-    return;
 }
 
 /************************************************************************
@@ -28782,7 +28806,11 @@ xmlSchemaValidateStream(xmlSchemaValidCtxtPtr ctxt,
         ret = -1;
 	goto done;
     }
-    inputPush(pctxt, inputStream);
+    if (inputPush(pctxt, inputStream) < 0) {
+        xmlFreeInputStream(inputStream);
+        ret = -1;
+        goto done;
+    }
 
     ctxt->enc = enc;
 
