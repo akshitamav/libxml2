@@ -10035,7 +10035,9 @@ xmlParseVersionNum(xmlParserCtxtPtr ctxt) {
 	xmlFree(buf);
 	return(NULL);
     }
+
     buf[len++] = cur;
+
     NEXT;
     cur=CUR;
     if (cur != '.') {
