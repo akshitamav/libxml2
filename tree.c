@@ -47,7 +47,12 @@
 #include "private/error.h"
 #include "private/tree.h"
 
-int __xmlRegisterCallbacks = 0;
+/*
+ * Internal variable indicating whether a callback has been registered
+ * for node creation/destruction. This avoids looking up thread-local
+ * data if no callback was ever registered.
+ */
+int xmlRegisterCallbacks = 0;
 
 /************************************************************************
  *									*
@@ -99,7 +104,6 @@ static int xmlCompressMode = 0;
  ************************************************************************/
 #include <libxml/hash.h>
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlGetEntityFromDtd:
  * @dtd:  A pointer to the DTD to search
@@ -142,7 +146,6 @@ xmlGetParameterEntityFromDtd(const xmlDtd *dtd, const xmlChar *name) {
     }
     return(NULL);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -172,6 +175,12 @@ xmlBuildQName(const xmlChar *ncname, const xmlChar *prefix,
 
     if (ncname == NULL) return(NULL);
     if (prefix == NULL) return((xmlChar *) ncname);
+
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+    /* Make allocation more likely */
+    if (len > 8)
+        len = 8;
+#endif
 
     lenn = strlen((char *) ncname);
     lenp = strlen((char *) prefix);
@@ -412,7 +421,6 @@ try_complex:
     return(0);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlValidateQName:
  * @value: the value to check
@@ -651,7 +659,6 @@ try_complex:
 	return(1);
     return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -876,7 +883,7 @@ xmlNewDtd(xmlDocPtr doc, const xmlChar *name,
 	doc->extSubset = cur;
     cur->doc = doc;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
 
@@ -999,7 +1006,7 @@ xmlCreateIntSubset(xmlDocPtr doc, const xmlChar *name,
 	}
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
 
@@ -1035,7 +1042,7 @@ xmlFreeDtd(xmlDtdPtr cur) {
     }
     if (cur->doc != NULL) dict = cur->doc->dict;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr)cur);
 
     if (cur->children != NULL) {
@@ -1116,7 +1123,7 @@ xmlNewDoc(const xmlChar *version) {
      */
     cur->charset = XML_CHAR_ENCODING_UTF8;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
 }
@@ -1138,7 +1145,7 @@ xmlFreeDoc(xmlDocPtr cur) {
 
     dict = cur->dict;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr)cur);
 
     /*
@@ -1207,7 +1214,7 @@ xmlNodeParseContentInternal(const xmlDoc *doc, xmlNodePtr parent,
     else
         remaining = len;
 
-    if (value == NULL)
+    if ((value == NULL) || (value[0] == 0))
         goto done;
 
     cur = value;
@@ -1473,8 +1480,8 @@ xmlNodeParseContent(xmlNodePtr node, const xmlChar *content, int len) {
  *
  * See xmlStringGetNodeList.
  *
- * Returns a pointer to the first child or NULL if a memory
- * allocation failed.
+ * Returns a pointer to the first child or NULL if the value if empty
+ * or a memory allocation failed.
  */
 xmlNodePtr
 xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
@@ -1500,8 +1507,8 @@ xmlStringLenGetNodeList(const xmlDoc *doc, const xmlChar *value, int len) {
  * undeclared entities will be ignored silently with unspecified
  * results.
  *
- * Returns a pointer to the first child or NULL if a memory
- * allocation failed.
+ * Returns a pointer to the first child or NULL if the value if empty
+ * or a memory allocation failed.
  */
 xmlNodePtr
 xmlStringGetNodeList(const xmlDoc *doc, const xmlChar *value) {
@@ -1620,7 +1627,6 @@ xmlNodeListGetString(xmlDocPtr doc, const xmlNode *list, int inLine)
     return(xmlNodeListGetStringInternal(doc, list, escMode));
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeListGetRawString:
  * @doc:  a document (optional)
@@ -1642,7 +1648,6 @@ xmlNodeListGetRawString(const xmlDoc *doc, const xmlNode *list, int inLine)
     int escMode = inLine ? 0 : 3;
     return(xmlNodeListGetStringInternal((xmlDocPtr) doc, list, escMode));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 static xmlAttrPtr
 xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
@@ -1733,7 +1738,7 @@ xmlNewPropInternal(xmlNodePtr node, xmlNsPtr ns,
         }
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
         xmlRegisterNodeDefaultValue((xmlNodePtr) cur);
     return (cur);
 
@@ -1742,8 +1747,6 @@ error:
     return(NULL);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_HTML_ENABLED) || \
-    defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlNewProp:
  * @node:  the parent node (optional)
@@ -1770,7 +1773,6 @@ xmlNewProp(xmlNodePtr node, const xmlChar *name, const xmlChar *value) {
 
 	return xmlNewPropInternal(node, NULL, name, value, 0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNewNsProp:
@@ -1871,7 +1873,7 @@ xmlNewDocProp(xmlDocPtr doc, const xmlChar *name, const xmlChar *value) {
             goto error;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
 
@@ -1910,7 +1912,7 @@ xmlFreeProp(xmlAttrPtr cur) {
 
     if (cur->doc != NULL) dict = cur->doc->dict;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr)cur);
 
     /* Check for ID removal -> leading to invalid references ! */
@@ -2006,7 +2008,7 @@ xmlNewDocPI(xmlDocPtr doc, const xmlChar *name, const xmlChar *content) {
             goto error;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
     return(cur);
 
@@ -2093,7 +2095,7 @@ xmlNewElem(xmlDocPtr doc, xmlNsPtr ns, const xmlChar *name,
         }
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)cur);
 
     return(cur);
@@ -2192,7 +2194,6 @@ xmlNewDocNodeEatName(xmlDocPtr doc, xmlNsPtr ns,
     return(cur);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNewDocRawNode:
  * @doc:  the target document
@@ -2256,11 +2257,10 @@ xmlNewDocFragment(xmlDocPtr doc) {
 
     cur->doc = doc;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNewText:
@@ -2293,7 +2293,7 @@ xmlNewText(const xmlChar *content) {
             goto error;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 
@@ -2302,7 +2302,6 @@ error:
     return(NULL);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNewTextChild:
  * @parent:  the parent node
@@ -2364,7 +2363,6 @@ xmlNewTextChild(xmlNodePtr parent, xmlNsPtr ns,
 
     return(cur);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNewEntityRef:
@@ -2396,7 +2394,7 @@ xmlNewEntityRef(xmlDocPtr doc, xmlChar *name) {
     cur->doc = doc;
     cur->name = name;
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
 
     return(cur);
@@ -2497,7 +2495,7 @@ xmlNewReference(const xmlDoc *doc, const xmlChar *name) {
 	cur->last = (xmlNodePtr) ent;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 
@@ -2557,7 +2555,7 @@ xmlNewTextLen(const xmlChar *content, int len) {
         }
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 }
@@ -2613,7 +2611,7 @@ xmlNewComment(const xmlChar *content) {
             goto error;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 
@@ -2655,7 +2653,7 @@ xmlNewCDataBlock(xmlDocPtr doc, const xmlChar *content, int len) {
         }
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue(cur);
     return(cur);
 }
@@ -2914,7 +2912,6 @@ xmlSetListDoc(xmlNodePtr list, xmlDocPtr doc) {
     return(ret);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlNewChild:
  * @parent:  the parent node
@@ -2978,7 +2975,6 @@ xmlNewChild(xmlNodePtr parent, xmlNsPtr ns,
 
     return(cur);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 static void
 xmlTextSetContent(xmlNodePtr text, xmlChar *content) {
@@ -3171,8 +3167,6 @@ xmlAddNextSibling(xmlNodePtr prev, xmlNodePtr cur) {
     return(xmlInsertNode(prev->doc, cur, prev->parent, prev, prev->next, 0));
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_HTML_ENABLED) || \
-    defined(LIBXML_SCHEMAS_ENABLED) || defined(LIBXML_XINCLUDE_ENABLED)
 /**
  * xmlAddPrevSibling:
  * @next:  the target node
@@ -3203,7 +3197,6 @@ xmlAddPrevSibling(xmlNodePtr next, xmlNodePtr cur) {
 
     return(xmlInsertNode(next->doc, cur, next->parent, next->prev, next, 0));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlAddSibling:
@@ -3422,7 +3415,6 @@ xmlGetLastChild(const xmlNode *parent) {
     return(parent->last);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /*
  * 5 interfaces from DOM ElementTraversal
  */
@@ -3607,8 +3599,6 @@ xmlNextElementSibling(xmlNodePtr node) {
     return(NULL);
 }
 
-#endif /* LIBXML_TREE_ENABLED */
-
 /**
  * xmlFreeNodeList:
  * @cur:  the first node in the list
@@ -3651,7 +3641,7 @@ xmlFreeNodeList(xmlNodePtr cur) {
             cur->prev = NULL;
             cur->next = NULL;
         } else {
-	    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+	    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 		xmlDeregisterNodeDefaultValue(cur);
 
 	    if (((cur->type == XML_ELEMENT_NODE) ||
@@ -3725,17 +3715,16 @@ xmlFreeNode(xmlNodePtr cur) {
 	xmlFreeProp((xmlAttrPtr) cur);
 	return;
     }
+    if (cur->type == XML_ENTITY_DECL) {
+        xmlFreeEntity((xmlEntityPtr) cur);
+        return;
+    }
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue(cur);
 
     if (cur->doc != NULL) dict = cur->doc->dict;
 
-    if (cur->type == XML_ENTITY_DECL) {
-        xmlEntityPtr ent = (xmlEntityPtr) cur;
-	DICT_FREE(ent->SystemID);
-	DICT_FREE(ent->ExternalID);
-    }
     if ((cur->children != NULL) &&
 	(cur->type != XML_ENTITY_REF_NODE))
 	xmlFreeNodeList(cur->children);
@@ -3834,7 +3823,6 @@ xmlUnlinkNode(xmlNodePtr cur) {
     xmlUnlinkNodeInternal(cur);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_WRITER_ENABLED)
 /**
  * xmlReplaceNode:
  * @old:  the old node
@@ -3896,7 +3884,6 @@ xmlReplaceNode(xmlNodePtr old, xmlNodePtr cur) {
     old->parent = NULL;
     return(old);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -4054,7 +4041,6 @@ xmlCopyPropInternal(xmlDocPtr doc, xmlNodePtr target, xmlAttrPtr cur) {
      */
     if ((target != NULL) && (cur != NULL) &&
 	(target->doc != NULL) && (cur->doc != NULL) &&
-	(cur->doc->ids != NULL) &&
         (cur->parent != NULL) &&
         (cur->children != NULL)) {
         int res = xmlIsID(cur->doc, cur->parent, cur);
@@ -4190,9 +4176,7 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
 
         case XML_DOCUMENT_NODE:
         case XML_HTML_DOCUMENT_NODE:
-#ifdef LIBXML_TREE_ENABLED
 	    return((xmlNodePtr) xmlCopyDoc((xmlDocPtr) node, extended));
-#endif /* LIBXML_TREE_ENABLED */
         default:
             return(NULL);
     }
@@ -4343,7 +4327,7 @@ xmlStaticCopyNode(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent,
     }
 
 out:
-    if ((__xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlRegisterNodeDefaultValue))
 	xmlRegisterNodeDefaultValue((xmlNodePtr)ret);
     return(ret);
 
@@ -4374,7 +4358,6 @@ xmlStaticCopyNodeList(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent) {
     while (node != NULL) {
         xmlNodePtr next = node->next;
 
-#ifdef LIBXML_TREE_ENABLED
 	if (node->type == XML_DTD_NODE ) {
 	    if (doc == NULL) {
 		node = next;
@@ -4412,7 +4395,6 @@ xmlStaticCopyNodeList(xmlNodePtr node, xmlDocPtr doc, xmlNodePtr parent) {
                 q->prev = NULL;
 	    }
 	} else
-#endif /* LIBXML_TREE_ENABLED */
 	    q = xmlStaticCopyNode(node, doc, parent, 1);
 	if (q == NULL) goto error;
 	if (ret == NULL) {
@@ -4512,7 +4494,6 @@ xmlNodePtr xmlCopyNodeList(xmlNodePtr node) {
     return(ret);
 }
 
-#if defined(LIBXML_TREE_ENABLED)
 /**
  * xmlCopyDtd:
  * @dtd:  the DTD
@@ -4618,9 +4599,7 @@ error:
     xmlFreeDtd(ret);
     return(NULL);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlCopyDoc:
  * @doc:  the document
@@ -4662,7 +4641,6 @@ xmlCopyDoc(xmlDocPtr doc, int recursive) {
 
     ret->last = NULL;
     ret->children = NULL;
-#ifdef LIBXML_TREE_ENABLED
     if (doc->intSubset != NULL) {
         ret->intSubset = xmlCopyDtd(doc->intSubset);
 	if (ret->intSubset == NULL)
@@ -4670,7 +4648,6 @@ xmlCopyDoc(xmlDocPtr doc, int recursive) {
         /* Can't fail on DTD */
 	xmlSetTreeDoc((xmlNodePtr)ret->intSubset, ret);
     }
-#endif
     if (doc->oldNs != NULL) {
         ret->oldNs = xmlCopyNamespaceList(doc->oldNs);
         if (ret->oldNs == NULL)
@@ -4697,7 +4674,6 @@ error:
     xmlFreeDoc(ret);
     return(NULL);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /************************************************************************
  *									*
@@ -4771,7 +4747,6 @@ xmlGetLineNo(const xmlNode *node)
     return(xmlGetLineNoInternal(node, 0));
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_DEBUG_ENABLED)
 /**
  * xmlGetNodePath:
  * @node: a node
@@ -5013,7 +4988,6 @@ xmlGetNodePath(const xmlNode *node)
     xmlFree(buf);
     return (buffer);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlDocGetRootElement:
@@ -5038,7 +5012,6 @@ xmlDocGetRootElement(const xmlDoc *doc) {
     return(ret);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_WRITER_ENABLED)
 /**
  * xmlDocSetRootElement:
  * @doc:  the document
@@ -5084,9 +5057,7 @@ xmlDocSetRootElement(xmlDocPtr doc, xmlNodePtr root) {
     }
     return(old);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED)
 /**
  * xmlNodeSetLang:
  * @cur:  the node being changed
@@ -5116,7 +5087,6 @@ xmlNodeSetLang(xmlNodePtr cur, const xmlChar *lang) {
 
     return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeGetLang:
@@ -5151,7 +5121,6 @@ xmlNodeGetLang(const xmlNode *cur) {
 }
 
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeSetSpacePreserve:
  * @cur:  the node being changed
@@ -5188,7 +5157,6 @@ xmlNodeSetSpacePreserve(xmlNodePtr cur, int val) {
 
     return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeGetSpacePreserve:
@@ -5231,7 +5199,6 @@ xmlNodeGetSpacePreserve(const xmlNode *cur) {
     return(-1);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeSetName:
  * @cur:  the node being changed
@@ -5277,9 +5244,7 @@ xmlNodeSetName(xmlNodePtr cur, const xmlChar *name) {
         ((dict == NULL) || (!xmlDictOwns(dict, oldName))))
         xmlFree((xmlChar *) oldName);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_XINCLUDE_ENABLED)
 /**
  * xmlNodeSetBase:
  * @cur:  the node being changed
@@ -5334,7 +5299,6 @@ xmlNodeSetBase(xmlNodePtr cur, const xmlChar* uri) {
 
     return(0);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeGetBaseSafe:
@@ -5758,7 +5722,6 @@ xmlNodeSetContent(xmlNodePtr cur, const xmlChar *content) {
     return(xmlNodeSetContentInternal(cur, content, -1));
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlNodeSetContentLen:
  * @cur:  the node being modified
@@ -5773,7 +5736,6 @@ int
 xmlNodeSetContentLen(xmlNodePtr cur, const xmlChar *content, int len) {
     return(xmlNodeSetContentInternal(cur, content, len));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeAddContentLen:
@@ -5867,7 +5829,6 @@ xmlTextMerge(xmlNodePtr first, xmlNodePtr second) {
     return(first);
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_XPATH_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlGetNsListSafe:
  * @doc:  the document
@@ -5957,7 +5918,6 @@ xmlGetNsList(const xmlDoc *doc, const xmlNode *node)
     xmlGetNsListSafe(doc, node, &ret);
     return(ret);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 static xmlNsPtr
 xmlNewXmlNs(void) {
@@ -6337,8 +6297,6 @@ xmlNewReconciledNs(xmlNodePtr tree, xmlNsPtr ns) {
     return(def);
 }
 
-#ifdef LIBXML_TREE_ENABLED
-
 typedef struct {
     xmlNsPtr oldNs;
     xmlNsPtr newNs;
@@ -6497,7 +6455,6 @@ xmlReconciliateNs(xmlDocPtr doc, xmlNodePtr tree) {
 	xmlFree(cache);
     return(ret);
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 static xmlAttrPtr
 xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
@@ -6539,7 +6496,6 @@ xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
 	}
     }
 
-#ifdef LIBXML_TREE_ENABLED
     if (! useDTD)
 	return(NULL);
     /*
@@ -6626,7 +6582,7 @@ xmlGetPropNodeInternal(const xmlNode *node, const xmlChar *name,
 	if ((attrDecl != NULL) && (attrDecl->defaultValue != NULL))
 	    return((xmlAttrPtr) attrDecl);
     }
-#endif /* LIBXML_TREE_ENABLED */
+
     return(NULL);
 }
 
@@ -6839,7 +6795,6 @@ xmlGetNsProp(const xmlNode *node, const xmlChar *name, const xmlChar *nameSpace)
     return(xmlGetPropNodeValueInternal(prop));
 }
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED)
 /**
  * xmlUnsetProp:
  * @node:  the node
@@ -6882,9 +6837,7 @@ xmlUnsetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name) {
     xmlFreeProp(prop);
     return(0);
 }
-#endif
 
-#if defined(LIBXML_TREE_ENABLED) || defined(LIBXML_XINCLUDE_ENABLED) || defined(LIBXML_SCHEMAS_ENABLED) || defined(LIBXML_HTML_ENABLED)
 /**
  * xmlSetProp:
  * @node:  the node
@@ -6997,8 +6950,6 @@ xmlSetNsProp(xmlNodePtr node, xmlNsPtr ns, const xmlChar *name,
     */
     return(xmlNewPropInternal(node, ns, name, value, 0));
 }
-
-#endif /* LIBXML_TREE_ENABLED */
 
 /**
  * xmlNodeIsText:
@@ -9951,7 +9902,7 @@ xmlRegisterNodeDefault(xmlRegisterNodeFunc func)
 {
     xmlRegisterNodeFunc old = xmlRegisterNodeDefaultValue;
 
-    __xmlRegisterCallbacks = 1;
+    xmlRegisterCallbacks = 1;
     xmlRegisterNodeDefaultValue = func;
     return(old);
 }
@@ -9971,7 +9922,7 @@ xmlDeregisterNodeDefault(xmlDeregisterNodeFunc func)
 {
     xmlDeregisterNodeFunc old = xmlDeregisterNodeDefaultValue;
 
-    __xmlRegisterCallbacks = 1;
+    xmlRegisterCallbacks = 1;
     xmlDeregisterNodeDefaultValue = func;
     return(old);
 }

@@ -19,17 +19,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef HAVE_SYS_STAT_H
-#include <sys/stat.h>
-#endif
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#elif defined (_WIN32)
-#include <io.h>
-#endif
-#ifdef HAVE_FCNTL_H
+
 #include <fcntl.h>
+#include <sys/stat.h>
+
+#ifdef _WIN32
+  #include <io.h>
+#else
+  #include <unistd.h>
 #endif
+
 #include <libxml/xmlmemory.h>
 #include <libxml/hash.h>
 #include <libxml/uri.h>
@@ -38,6 +37,7 @@
 #include <libxml/xmlerror.h>
 #include <libxml/threads.h>
 
+#include "private/cata.h"
 #include "private/buf.h"
 #include "private/error.h"
 
@@ -169,7 +169,7 @@ static xmlCatalogPtr xmlDefaultCatalog = NULL;
 static xmlRMutexPtr xmlCatalogMutex = NULL;
 
 /*
- * Whether the catalog support was initialized.
+ * Whether the default system catalog was initialized.
  */
 static int xmlCatalogInitialized = 0;
 
@@ -222,11 +222,11 @@ xmlCatalogErr(xmlCatalogEntryPtr catal, xmlNodePtr node, int error,
 {
     int res;
 
-    res = __xmlRaiseError(NULL, NULL, NULL, catal, node,
-                          XML_FROM_CATALOG, error, XML_ERR_ERROR, NULL, 0,
-                          (const char *) str1, (const char *) str2,
-                          (const char *) str3, 0, 0,
-                          msg, str1, str2, str3);
+    res = xmlRaiseError(NULL, NULL, NULL, catal, node,
+                        XML_FROM_CATALOG, error, XML_ERR_ERROR, NULL, 0,
+                        (const char *) str1, (const char *) str2,
+                        (const char *) str3, 0, 0,
+                        msg, str1, str2, str3);
     if (res < 0)
         xmlCatalogErrMemory();
 }
@@ -903,7 +903,11 @@ xmlParseCatalogFile(const char *filename) {
     inputStream->buf = buf;
     xmlBufResetInput(buf->buffer, inputStream);
 
-    inputPush(ctxt, inputStream);
+    if (inputPush(ctxt, inputStream) < 0) {
+        xmlFreeInputStream(inputStream);
+        xmlFreeParserCtxt(ctxt);
+        return(NULL);
+    }
 
     ctxt->valid = 0;
     ctxt->validate = 0;
@@ -936,60 +940,33 @@ xmlParseCatalogFile(const char *filename) {
 static xmlChar *
 xmlLoadFileContent(const char *filename)
 {
-#ifdef HAVE_STAT
     int fd;
-#else
-    FILE *fd;
-#endif
     int len;
     long size;
 
-#ifdef HAVE_STAT
     struct stat info;
-#endif
     xmlChar *content;
 
     if (filename == NULL)
         return (NULL);
 
-#ifdef HAVE_STAT
     if (stat(filename, &info) < 0)
         return (NULL);
-#endif
 
-#ifdef HAVE_STAT
-    if ((fd = open(filename, O_RDONLY)) < 0)
-#else
-    if ((fd = fopen(filename, "rb")) == NULL)
-#endif
+    fd = open(filename, O_RDONLY);
+    if (fd  < 0)
     {
         return (NULL);
     }
-#ifdef HAVE_STAT
     size = info.st_size;
-#else
-    if (fseek(fd, 0, SEEK_END) || (size = ftell(fd)) == EOF || fseek(fd, 0, SEEK_SET)) {        /* File operations denied? ok, just close and return failure */
-        fclose(fd);
-        return (NULL);
-    }
-#endif
     content = (xmlChar*)xmlMallocAtomic(size + 10);
     if (content == NULL) {
         xmlCatalogErrMemory();
-#ifdef HAVE_STAT
 	close(fd);
-#else
-	fclose(fd);
-#endif
         return (NULL);
     }
-#ifdef HAVE_STAT
     len = read(fd, content, size);
     close(fd);
-#else
-    len = fread(content, 1, size, fd);
-    fclose(fd);
-#endif
     if (len < 0) {
         xmlFree(content);
         return (NULL);
@@ -3056,41 +3033,31 @@ xmlCatalogIsEmpty(xmlCatalogPtr catal) {
  ************************************************************************/
 
 /**
- * xmlInitializeCatalogData:
+ * xmlInitCatalogInternal:
  *
  * Do the catalog initialization only of global data, doesn't try to load
  * any catalog actually.
- * this function is not thread safe, catalog initialization should
- * preferably be done once at startup
  */
-static void
-xmlInitializeCatalogData(void) {
-    if (xmlCatalogInitialized != 0)
-	return;
-
+void
+xmlInitCatalogInternal(void) {
     if (getenv("XML_DEBUG_CATALOG"))
 	xmlDebugCatalogs = 1;
     xmlCatalogMutex = xmlNewRMutex();
-
-    xmlCatalogInitialized = 1;
 }
+
 /**
  * xmlInitializeCatalog:
  *
- * Do the catalog initialization.
- * this function is not thread safe, catalog initialization should
- * preferably be done once at startup
+ * Load the default system catalog.
  */
 void
 xmlInitializeCatalog(void) {
     if (xmlCatalogInitialized != 0)
 	return;
 
-    xmlInitializeCatalogData();
-    xmlRMutexLock(xmlCatalogMutex);
+    xmlInitParser();
 
-    if (getenv("XML_DEBUG_CATALOG"))
-	xmlDebugCatalogs = 1;
+    xmlRMutexLock(xmlCatalogMutex);
 
     if (xmlDefaultCatalog == NULL) {
 	const char *catalogs;
@@ -3132,6 +3099,8 @@ xmlInitializeCatalog(void) {
     }
 
     xmlRMutexUnlock(xmlCatalogMutex);
+
+    xmlCatalogInitialized = 1;
 }
 
 
@@ -3152,8 +3121,7 @@ xmlLoadCatalog(const char *filename)
     int ret;
     xmlCatalogPtr catal;
 
-    if (!xmlCatalogInitialized)
-	xmlInitializeCatalogData();
+    xmlInitParser();
 
     xmlRMutexLock(xmlCatalogMutex);
 
@@ -3228,9 +3196,6 @@ xmlLoadCatalogs(const char *pathss) {
  */
 void
 xmlCatalogCleanup(void) {
-    if (xmlCatalogInitialized == 0)
-        return;
-
     xmlRMutexLock(xmlCatalogMutex);
     if (xmlDebugCatalogs)
 	fprintf(stderr,
@@ -3244,6 +3209,15 @@ xmlCatalogCleanup(void) {
     xmlDebugCatalogs = 0;
     xmlCatalogInitialized = 0;
     xmlRMutexUnlock(xmlCatalogMutex);
+}
+
+/**
+ * xmlCleanupCatalogInternal:
+ *
+ * Free global data.
+ */
+void
+xmlCleanupCatalogInternal(void) {
     xmlFreeRMutex(xmlCatalogMutex);
 }
 
@@ -3365,7 +3339,7 @@ xmlCatalogAdd(const xmlChar *type, const xmlChar *orig, const xmlChar *replace) 
     int res = -1;
 
     if (!xmlCatalogInitialized)
-	xmlInitializeCatalogData();
+	xmlInitializeCatalog();
 
     xmlRMutexLock(xmlCatalogMutex);
     /*
@@ -3439,6 +3413,9 @@ xmlCatalogConvert(void) {
 /**
  * xmlCatalogGetDefaults:
  *
+ * DEPRECATED: Use XML_PARSE_NO_SYS_CATALOG and
+ * XML_PARSE_NO_CATALOG_PI.
+ *
  * Used to get the user preference w.r.t. to what catalogs should
  * be accepted
  *
@@ -3452,6 +3429,9 @@ xmlCatalogGetDefaults(void) {
 /**
  * xmlCatalogSetDefaults:
  * @allow:  what catalogs should be accepted
+ *
+ * DEPRECATED: Use XML_PARSE_NO_SYS_CATALOG and
+ * XML_PARSE_NO_CATALOG_PI.
  *
  * Used to set the user preference w.r.t. to what catalogs should
  * be accepted
@@ -3484,6 +3464,8 @@ xmlCatalogSetDefaults(xmlCatalogAllow allow) {
 /**
  * xmlCatalogSetDefaultPrefer:
  * @prefer:  the default preference for delegation
+ *
+ * DEPRECATED: This setting is global and not thread-safe.
  *
  * Allows to set the preference between public and system for deletion
  * in XML Catalog resolution. C.f. section 4.1.1 of the spec
@@ -3552,9 +3534,6 @@ void
 xmlCatalogFreeLocal(void *catalogs) {
     xmlCatalogEntryPtr catal;
 
-    if (!xmlCatalogInitialized)
-	xmlInitializeCatalog();
-
     catal = (xmlCatalogEntryPtr) catalogs;
     if (catal != NULL)
 	xmlFreeCatalogEntryList(catal);
@@ -3574,8 +3553,7 @@ void *
 xmlCatalogAddLocal(void *catalogs, const xmlChar *URL) {
     xmlCatalogEntryPtr catal, add;
 
-    if (!xmlCatalogInitialized)
-	xmlInitializeCatalog();
+    xmlInitParser();
 
     if (URL == NULL)
 	return(catalogs);
@@ -3617,9 +3595,6 @@ xmlCatalogLocalResolve(void *catalogs, const xmlChar *pubID,
     xmlCatalogEntryPtr catal;
     xmlChar *ret;
 
-    if (!xmlCatalogInitialized)
-	xmlInitializeCatalog();
-
     if ((pubID == NULL) && (sysID == NULL))
 	return(NULL);
 
@@ -3660,9 +3635,6 @@ xmlChar *
 xmlCatalogLocalResolveURI(void *catalogs, const xmlChar *URI) {
     xmlCatalogEntryPtr catal;
     xmlChar *ret;
-
-    if (!xmlCatalogInitialized)
-	xmlInitializeCatalog();
 
     if (URI == NULL)
 	return(NULL);

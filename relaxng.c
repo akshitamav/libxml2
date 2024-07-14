@@ -229,6 +229,9 @@ struct _xmlRelaxNGParserCtxt {
 
     int crng;			/* compact syntax and other flags */
     int freedoc;		/* need to free the document */
+
+    xmlResourceLoader resourceLoader;
+    void *resourceCtxt;
 };
 
 #define FLAGS_IGNORABLE		1
@@ -488,10 +491,10 @@ xmlRngPErr(xmlRelaxNGParserCtxtPtr ctxt, xmlNodePtr node, int error,
         data = xmlGenericErrorContext;
     }
 
-    res = __xmlRaiseError(schannel, channel, data, NULL, node,
-                          XML_FROM_RELAXNGP, error, XML_ERR_ERROR, NULL, 0,
-                          (const char *) str1, (const char *) str2, NULL, 0, 0,
-                          msg, str1, str2);
+    res = xmlRaiseError(schannel, channel, data, NULL, node,
+                        XML_FROM_RELAXNGP, error, XML_ERR_ERROR, NULL, 0,
+                        (const char *) str1, (const char *) str2, NULL, 0, 0,
+                        msg, str1, str2);
     if (res < 0)
         xmlRngPErrMemory(ctxt);
 }
@@ -530,10 +533,10 @@ xmlRngVErr(xmlRelaxNGValidCtxtPtr ctxt, xmlNodePtr node, int error,
         data = xmlGenericErrorContext;
     }
 
-    res = __xmlRaiseError(schannel, channel, data, NULL, node,
-                          XML_FROM_RELAXNGV, error, XML_ERR_ERROR, NULL, 0,
-                          (const char *) str1, (const char *) str2, NULL, 0, 0,
-                          msg, str1, str2);
+    res = xmlRaiseError(schannel, channel, data, NULL, node,
+                        XML_FROM_RELAXNGV, error, XML_ERR_ERROR, NULL, 0,
+                        (const char *) str1, (const char *) str2, NULL, 0, 0,
+                        msg, str1, str2);
     if (res < 0)
         xmlRngVErrMemory(ctxt);
 }
@@ -1423,6 +1426,9 @@ xmlRelaxReadFile(xmlRelaxNGParserCtxtPtr ctxt, const char *filename) {
     }
     if (ctxt->serror != NULL)
         xmlCtxtSetErrorHandler(pctxt, ctxt->serror, ctxt->userData);
+    if (ctxt->resourceLoader != NULL)
+        xmlCtxtSetResourceLoader(pctxt, ctxt->resourceLoader,
+                                 ctxt->resourceCtxt);
     doc = xmlCtxtReadFile(pctxt, filename, NULL, 0);
     xmlFreeParserCtxt(pctxt);
 
@@ -1441,6 +1447,9 @@ xmlRelaxReadMemory(xmlRelaxNGParserCtxtPtr ctxt, const char *buf, int size) {
     }
     if (ctxt->serror != NULL)
         xmlCtxtSetErrorHandler(pctxt, ctxt->serror, ctxt->userData);
+    if (ctxt->resourceLoader != NULL)
+        xmlCtxtSetResourceLoader(pctxt, ctxt->resourceLoader,
+                                 ctxt->resourceCtxt);
     doc = xmlCtxtReadMemory(pctxt, buf, size, NULL, NULL, 0);
     xmlFreeParserCtxt(pctxt);
 
@@ -7566,6 +7575,23 @@ xmlRelaxNGSetParserStructuredErrors(xmlRelaxNGParserCtxtPtr ctxt,
     ctxt->userData = ctx;
 }
 
+/**
+ * xmlRelaxNGSetResourceLoader:
+ * @ctxt:  a Relax-NG parser context
+ * @loader:  the callback
+ * @vctxt:  contextual data for the callbacks
+ *
+ * Set the callback function used to load external resources.
+ */
+void
+xmlRelaxNGSetResourceLoader(xmlRelaxNGParserCtxtPtr ctxt,
+                            xmlResourceLoader loader, void *vctxt) {
+    if (ctxt == NULL)
+        return;
+    ctxt->resourceLoader = loader;
+    ctxt->resourceCtxt = vctxt;
+}
+
 #ifdef LIBXML_OUTPUT_ENABLED
 
 /************************************************************************
@@ -10648,7 +10674,6 @@ xmlRelaxNGCleanPSVI(xmlNodePtr node) {
 	    }
 	} while (cur != NULL);
     }
-    return;
 }
 /************************************************************************
  *									*

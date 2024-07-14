@@ -123,14 +123,14 @@ static void
 xmlWriterErrMsg(xmlTextWriterPtr ctxt, xmlParserErrors error,
                const char *msg)
 {
-    if (ctxt != NULL) {
-	__xmlRaiseError(NULL, NULL, NULL, ctxt->ctxt,
-	            NULL, XML_FROM_WRITER, error, XML_ERR_FATAL,
-		    NULL, 0, NULL, NULL, NULL, 0, 0, "%s", msg);
-    } else {
-	__xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_WRITER, error,
-                    XML_ERR_FATAL, NULL, 0, NULL, NULL, NULL, 0, 0, "%s", msg);
-    }
+    xmlParserCtxtPtr pctxt = NULL;
+
+    if (ctxt != NULL)
+        pctxt = ctxt->ctxt;
+
+    xmlRaiseError(NULL, NULL, NULL, pctxt,
+                  NULL, XML_FROM_WRITER, error, XML_ERR_FATAL,
+                  NULL, 0, NULL, NULL, NULL, 0, 0, "%s", msg);
 }
 
 /**
@@ -146,14 +146,14 @@ static void LIBXML_ATTR_FORMAT(3,0)
 xmlWriterErrMsgInt(xmlTextWriterPtr ctxt, xmlParserErrors error,
                const char *msg, int val)
 {
-    if (ctxt != NULL) {
-	__xmlRaiseError(NULL, NULL, NULL, ctxt->ctxt,
-	            NULL, XML_FROM_WRITER, error, XML_ERR_FATAL,
-		    NULL, 0, NULL, NULL, NULL, val, 0, msg, val);
-    } else {
-	__xmlRaiseError(NULL, NULL, NULL, NULL, NULL, XML_FROM_WRITER, error,
-                    XML_ERR_FATAL, NULL, 0, NULL, NULL, NULL, val, 0, msg, val);
-    }
+    xmlParserCtxtPtr pctxt = NULL;
+
+    if (ctxt != NULL)
+        pctxt = ctxt->ctxt;
+
+    xmlRaiseError(NULL, NULL, NULL, pctxt,
+	          NULL, XML_FROM_WRITER, error, XML_ERR_FATAL,
+		  NULL, 0, NULL, NULL, NULL, val, 0, msg, val);
 }
 
 /**
@@ -355,8 +355,6 @@ xmlNewTextWriterDoc(xmlDocPtr * doc, int compression)
     memset(&saxHandler, '\0', sizeof(saxHandler));
     xmlSAX2InitDefaultSAXHandler(&saxHandler, 1);
     saxHandler.startDocument = xmlTextWriterStartDocumentCallback;
-    saxHandler.startElement = xmlSAX2StartElement;
-    saxHandler.endElement = xmlSAX2EndElement;
 
     ctxt = xmlCreatePushParserCtxt(&saxHandler, NULL, NULL, 0, NULL);
     if (ctxt == NULL) {
@@ -424,8 +422,6 @@ xmlNewTextWriterTree(xmlDocPtr doc, xmlNodePtr node, int compression)
     memset(&saxHandler, '\0', sizeof(saxHandler));
     xmlSAX2InitDefaultSAXHandler(&saxHandler, 1);
     saxHandler.startDocument = xmlTextWriterStartDocumentCallback;
-    saxHandler.startElement = xmlSAX2StartElement;
-    saxHandler.endElement = xmlSAX2EndElement;
 
     ctxt = xmlCreatePushParserCtxt(&saxHandler, NULL, NULL, 0, NULL);
     if (ctxt == NULL) {
@@ -4443,7 +4439,8 @@ xmlTextWriterWriteDocCallback(void *context, const char *str, int len)
     xmlParserCtxtPtr ctxt = (xmlParserCtxtPtr) context;
     int rc;
 
-    if ((rc = xmlParseChunk(ctxt, str, len, 0)) != 0) {
+    rc = xmlParseChunk(ctxt, str, len, 0);
+    if (rc != 0) {
         xmlWriterErrMsgInt(NULL, XML_ERR_INTERNAL_ERROR,
                         "xmlTextWriterWriteDocCallback : XML error %d !\n",
                         rc);
@@ -4467,7 +4464,8 @@ xmlTextWriterCloseDocCallback(void *context)
     xmlParserCtxtPtr ctxt = (xmlParserCtxtPtr) context;
     int rc;
 
-    if ((rc = xmlParseChunk(ctxt, NULL, 0, 1)) != 0) {
+    rc = xmlParseChunk(ctxt, NULL, 0, 1);
+    if (rc != 0) {
         xmlWriterErrMsgInt(NULL, XML_ERR_INTERNAL_ERROR,
                         "xmlTextWriterCloseDocCallback : XML error %d !\n",
                         rc);

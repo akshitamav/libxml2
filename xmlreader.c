@@ -156,6 +156,9 @@ struct _xmlTextReader {
     int                parserFlags;	/* the set of options set */
     /* Structured error handling */
     xmlStructuredErrorFunc sErrorFunc;  /* callback function */
+
+    xmlResourceLoader resourceLoader;
+    void *resourceCtxt;
 };
 
 #define NODE_IS_EMPTY		0x1
@@ -256,7 +259,7 @@ xmlTextReaderFreeProp(xmlTextReaderPtr reader, xmlAttrPtr cur) {
         dict = NULL;
     if (cur == NULL) return;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr) cur);
 
     if (cur->children != NULL)
@@ -347,7 +350,7 @@ xmlTextReaderFreeNodeList(xmlTextReaderPtr reader, xmlNodePtr cur) {
 	/* unroll to speed up freeing the document */
 	if (cur->type != XML_DTD_NODE) {
 
-	    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+	    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 		xmlDeregisterNodeDefaultValue(cur);
 
 	    if (((cur->type == XML_ELEMENT_NODE) ||
@@ -434,7 +437,7 @@ xmlTextReaderFreeNode(xmlTextReaderPtr reader, xmlNodePtr cur) {
 	cur->children = NULL;
     }
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue(cur);
 
     if (((cur->type == XML_ELEMENT_NODE) ||
@@ -487,7 +490,7 @@ xmlTextReaderFreeDoc(xmlTextReaderPtr reader, xmlDocPtr cur) {
 
     if (cur == NULL) return;
 
-    if ((__xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
+    if ((xmlRegisterCallbacks) && (xmlDeregisterNodeDefaultValue))
 	xmlDeregisterNodeDefaultValue((xmlNodePtr) cur);
 
     /*
@@ -1446,6 +1449,9 @@ node_found:
             if ((reader->errorFunc != NULL) || (reader->sErrorFunc != NULL))
                 xmlXIncludeSetErrorHandler(reader->xincctxt,
                         xmlTextReaderStructuredRelay, reader);
+            if (reader->resourceLoader != NULL)
+                xmlXIncludeSetResourceLoader(reader->xincctxt,
+                        reader->resourceLoader, reader->resourceCtxt);
 	}
 	/*
 	 * expand that node and process it
@@ -1748,7 +1754,10 @@ xmlTextReaderReadString(xmlTextReaderPtr reader)
     switch (node->type) {
         case XML_TEXT_NODE:
         case XML_CDATA_SECTION_NODE:
+            break;
         case XML_ELEMENT_NODE:
+            if (xmlTextReaderDoExpand(reader) == -1)
+                return(NULL);
             break;
         case XML_ATTRIBUTE_NODE:
             /* TODO */
@@ -4784,6 +4793,47 @@ xmlTextReaderSetStructuredErrorHandler(xmlTextReaderPtr reader,
 }
 
 /**
+ * xmlTextReaderGetErrorHandler:
+ * @reader:  the xmlTextReaderPtr used
+ * @f:	the callback function or NULL is no callback has been registered
+ * @arg:    a user argument
+ *
+ * Retrieve the error callback function and user argument.
+ */
+void
+xmlTextReaderGetErrorHandler(xmlTextReaderPtr reader,
+                             xmlTextReaderErrorFunc * f, void **arg)
+{
+    if (f != NULL)
+        *f = reader->errorFunc;
+    if (arg != NULL)
+        *arg = reader->errorFuncArg;
+}
+
+/**
+ * xmlTextReaderSetResourceLoader:
+ * @reader:  thr reader
+ * @loader:  resource loader
+ * @data:  user data which will be passed to the loader
+ *
+ * Register a callback function that will be called to load external
+ * resources like entities.
+ *
+ * Available since 2.14.0.
+ */
+void
+xmlTextReaderSetResourceLoader(xmlTextReaderPtr reader,
+                               xmlResourceLoader loader, void *data) {
+    if ((reader == NULL) || (reader->ctxt == NULL))
+        return;
+
+    reader->resourceLoader = loader;
+    reader->resourceCtxt = data;
+
+    xmlCtxtSetResourceLoader(reader->ctxt, loader, data);
+}
+
+/**
  * xmlTextReaderIsValid:
  * @reader:  the xmlTextReaderPtr used
  *
@@ -4807,23 +4857,6 @@ xmlTextReaderIsValid(xmlTextReaderPtr reader)
     return (0);
 }
 
-/**
- * xmlTextReaderGetErrorHandler:
- * @reader:  the xmlTextReaderPtr used
- * @f:	the callback function or NULL is no callback has been registered
- * @arg:    a user argument
- *
- * Retrieve the error callback function and user argument.
- */
-void
-xmlTextReaderGetErrorHandler(xmlTextReaderPtr reader,
-                             xmlTextReaderErrorFunc * f, void **arg)
-{
-    if (f != NULL)
-        *f = reader->errorFunc;
-    if (arg != NULL)
-        *arg = reader->errorFuncArg;
-}
 /************************************************************************
  *									*
  *	New set (2.6.0) of simpler and more flexible APIs		*
@@ -4955,7 +4988,10 @@ xmlTextReaderSetup(xmlTextReaderPtr reader,
 	    inputStream->buf = buf;
             xmlBufResetInput(buf->buffer, inputStream);
 
-	    inputPush(reader->ctxt, inputStream);
+            if (inputPush(reader->ctxt, inputStream) < 0) {
+                xmlFreeInputStream(inputStream);
+                return(-1);
+            }
 	    reader->cur = 0;
 	}
     }
@@ -5062,6 +5098,10 @@ xmlTextReaderGetLastError(xmlTextReaderPtr reader)
  * xmlTextReaderByteConsumed:
  * @reader: an XML reader
  *
+ * DEPRECATED: The returned value is mostly random and useless.
+ * It reflects the parser reading ahead and is in no way related to
+ * the current node.
+ *
  * This function provides the current index of the parser used
  * by the reader, relative to the start of the current entity.
  * This function actually just wraps a call to xmlBytesConsumed()
@@ -5073,9 +5113,14 @@ xmlTextReaderGetLastError(xmlTextReaderPtr reader)
  */
 long
 xmlTextReaderByteConsumed(xmlTextReaderPtr reader) {
+    xmlParserInputPtr in;
+
     if ((reader == NULL) || (reader->ctxt == NULL))
         return(-1);
-    return(xmlByteConsumed(reader->ctxt));
+    in = reader->ctxt->input;
+    if (in == NULL)
+        return(-1);
+    return(in->consumed + (in->cur - in->base));
 }
 
 

@@ -33,35 +33,35 @@
  * The XML predefined entities.
  */
 
-static const xmlEntity xmlEntityLt = {
+static xmlEntity xmlEntityLt = {
     NULL, XML_ENTITY_DECL, BAD_CAST "lt",
     NULL, NULL, NULL, NULL, NULL, NULL,
     BAD_CAST "<", BAD_CAST "<", 1,
     XML_INTERNAL_PREDEFINED_ENTITY,
     NULL, NULL, NULL, NULL, 0, 0, 0
 };
-static const xmlEntity xmlEntityGt = {
+static xmlEntity xmlEntityGt = {
     NULL, XML_ENTITY_DECL, BAD_CAST "gt",
     NULL, NULL, NULL, NULL, NULL, NULL,
     BAD_CAST ">", BAD_CAST ">", 1,
     XML_INTERNAL_PREDEFINED_ENTITY,
     NULL, NULL, NULL, NULL, 0, 0, 0
 };
-static const xmlEntity xmlEntityAmp = {
+static xmlEntity xmlEntityAmp = {
     NULL, XML_ENTITY_DECL, BAD_CAST "amp",
     NULL, NULL, NULL, NULL, NULL, NULL,
     BAD_CAST "&", BAD_CAST "&", 1,
     XML_INTERNAL_PREDEFINED_ENTITY,
     NULL, NULL, NULL, NULL, 0, 0, 0
 };
-static const xmlEntity xmlEntityQuot = {
+static xmlEntity xmlEntityQuot = {
     NULL, XML_ENTITY_DECL, BAD_CAST "quot",
     NULL, NULL, NULL, NULL, NULL, NULL,
     BAD_CAST "\"", BAD_CAST "\"", 1,
     XML_INTERNAL_PREDEFINED_ENTITY,
     NULL, NULL, NULL, NULL, 0, 0, 0
 };
-static const xmlEntity xmlEntityApos = {
+static xmlEntity xmlEntityApos = {
     NULL, XML_ENTITY_DECL, BAD_CAST "apos",
     NULL, NULL, NULL, NULL, NULL, NULL,
     BAD_CAST "'", BAD_CAST "'", 1,
@@ -290,7 +290,8 @@ xmlAddEntity(xmlDocPtr doc, int extSubset, const xmlChar *name, int type,
 	dtd->last = (xmlNodePtr) ret;
     }
 
-    *out = ret;
+    if (out != NULL)
+        *out = ret;
     return(0);
 }
 
@@ -308,21 +309,21 @@ xmlGetPredefinedEntity(const xmlChar *name) {
     switch (name[0]) {
         case 'l':
 	    if (xmlStrEqual(name, BAD_CAST "lt"))
-	        return((xmlEntityPtr) &xmlEntityLt);
+	        return(&xmlEntityLt);
 	    break;
         case 'g':
 	    if (xmlStrEqual(name, BAD_CAST "gt"))
-	        return((xmlEntityPtr) &xmlEntityGt);
+	        return(&xmlEntityGt);
 	    break;
         case 'a':
 	    if (xmlStrEqual(name, BAD_CAST "amp"))
-	        return((xmlEntityPtr) &xmlEntityAmp);
+	        return(&xmlEntityAmp);
 	    if (xmlStrEqual(name, BAD_CAST "apos"))
-	        return((xmlEntityPtr) &xmlEntityApos);
+	        return(&xmlEntityApos);
 	    break;
         case 'q':
 	    if (xmlStrEqual(name, BAD_CAST "quot"))
-	        return((xmlEntityPtr) &xmlEntityQuot);
+	        return(&xmlEntityQuot);
 	    break;
 	default:
 	    break;
@@ -849,7 +850,6 @@ xmlFreeEntitiesTable(xmlEntitiesTablePtr table) {
     xmlHashFree(table, xmlFreeEntityWrapper);
 }
 
-#ifdef LIBXML_TREE_ENABLED
 /**
  * xmlCopyEntity:
  * @ent:  An entity
@@ -919,7 +919,6 @@ xmlEntitiesTablePtr
 xmlCopyEntitiesTable(xmlEntitiesTablePtr table) {
     return(xmlHashCopySafe(table, xmlCopyEntity, xmlFreeEntityWrapper));
 }
-#endif /* LIBXML_TREE_ENABLED */
 
 #ifdef LIBXML_OUTPUT_ENABLED
 
