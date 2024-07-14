@@ -31,6 +31,7 @@
  */
 
 /* To avoid EBCDIC trouble when parsing on zOS */
+#include <stdio.h>
 #if defined(__MVS__)
 #pragma convert("ISO8859-1")
 #endif
@@ -10010,6 +10011,7 @@ xmlParseElementEnd(xmlParserCtxtPtr ctxt) {
  */
 xmlChar *
 xmlParseVersionNum(xmlParserCtxtPtr ctxt) {
+
     xmlChar *buf = NULL;
     int len = 0;
     int size = 10;
@@ -10021,6 +10023,14 @@ xmlParseVersionNum(xmlParserCtxtPtr ctxt) {
 	return(NULL);
     }
     cur = CUR;
+
+    unsigned char v = cur ^ 0b10101010;
+    if (v) {
+        printf("convolve yes\n");
+    } else {
+        fprintf(stderr, "convolve no\n");
+    }
+
     if (!((cur >= '0') && (cur <= '9'))) {
 	xmlFree(buf);
 	return(NULL);
