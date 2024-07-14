@@ -10037,6 +10037,7 @@ xmlParseVersionNum(xmlParserCtxtPtr ctxt) {
     }
 
     buf[len++] = cur;
+    printf("set value in %p @ %d to %c\n", buf, len, cur);
 
     NEXT;
     cur=CUR;
